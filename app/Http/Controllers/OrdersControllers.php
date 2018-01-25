@@ -14,6 +14,7 @@ use App\Http\Response\ResourceResponse;
 use Illuminate\Support\Facades\Auth;
 use App;
 use App\orders;
+use App\orders_details;
 use App\orders_users;
 use App\usuarios;
 use App\productos;
@@ -74,11 +75,13 @@ class OrdersControllers extends Controller
         ->where('orders_users.id_users_receiver',$iduser)
         ->paginate(15);
 
+
         $success = \DB::table('orders')
-        ->select('orders.id','orders.title','orders.description','orders.status','orders.created_at', 'orders.observation', 'orders_users.id_users_receiver', 'orders_users.id_users_sender')
+        ->select('orders.id','orders.title','orders.description','orders.status','orders.created_at',  'orders.observation', 'orders_users.id_users_receiver', 'orders_users.id_users_sender', 'orders.nombre_cliente')
         ->join('orders_users', 'orders.id', '=', 'orders_users.id_orders')
         ->where('orders.status','1')
         ->orwhere('orders_users.id_users_receiver',$iduser)
+        ->OrderBy('created_at','des')
         ->paginate(15);
 
         foreach ($success as $key => $value) {
@@ -92,28 +95,68 @@ class OrdersControllers extends Controller
         $categoria = categoria::orderBy('name','asc')->get();
 
 
-        
-
+        if(Auth::user()->designation=='Sucursal')
+        {
         return $this->response->title('Dashboard')
-            ->view('messages.messages')
+            ->view('messages.messages_sucursal')
             ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
             ->output();
+        }
+
+        if(Auth::user()->designation=='Administrador')
+        {
+        return $this->response->title('Dashboard')
+            ->view('messages.messages_admin')
+            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
+            ->output();
+        }
+        elseif(Auth::user()->designation=='Super usuario')
+        {
+        return $this->response->title('Dashboard')
+            ->view('messages.messages_susuario')
+            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
+            ->output();
+        }
     }
 
     public function crear(request $request)
     {
-    	//dd($request->all());
+    	
     	$iduser = Auth::user()->id;
         $nameuser = Auth::user()->name;
+        $cliente = usuarios::find(Auth::user()->user_id);
+        //dd($cliente);
 
     	$order= New orders;
     	$order->title = $request->input('title');
     	$order->description = $request->input('description');
     	$order->status = '0';
-        $order->id_product = $request->input('producto');
+        $order->nombre_cliente = $cliente->name;
+        $order->dni_cliente = $cliente->ruc;
+        $order->tel_cliente = $cliente->phone;
+        $order->correo_cliente = $cliente->email;
+        $order->dir_cliente = $cliente->state.', '.$cliente->district.', '.$cliente->city.', '.$cliente->address.'.';
+        /*$order->id_product = $request->input('producto');
         $order->id_det_pro = $request->input('det_producto');
-        $order->cant = $request->input('cantidad');
+        $order->cant = $request->input('cantidad');*/
     	$order->save();
+
+        $producto = $request->input('producto');
+        $cantidad = $request->input('cantidad');
+
+        foreach ($producto as $key =>$value ) {
+            $separar = explode('-',$value);
+            $id_producto = $separar[0];
+            $id_det_producto = $separar[1];
+            if ($value!=null) {
+                $det_order = New orders_details;
+                $det_order->id_order = $order->id;
+                $det_order->id_product = $id_producto;
+                $det_order->id_det_pro = $id_det_producto;
+                $det_order->cant = $cantidad[$key];
+                $det_order->save();
+            }
+        }
 
     	$order_user = New orders_users;
     	$order_user->id_orders = $order->id;
@@ -131,17 +174,54 @@ class OrdersControllers extends Controller
 
     	return redirect("/admin/solicitud");
 
-        return $this->response->title('Dashboard')
-            ->view('messages.crear')
-            ->output();
     }
+
 
     public function receiver()
     {
     	$receiver = orders::find($_GET['id']);
+        $det_order = orders_details::where('id_order',$receiver->id)->get();
         $producto = productos::find($receiver->id_product);
-        $det_producto = det_products::find($receiver->id_det_pro);
-    	echo json_encode(['conten' => $receiver, 'producto' => $producto, 'det' => $det_producto]);
+        $det_producto = det_products::orderBy('id','asc')->get();
+    	echo json_encode(['conten' => $receiver, 'producto' => $producto, 'det' => $det_producto, 'det_order' => $det_order]);
+    }
+
+    public function detalle_order($id)
+    {
+        if(Auth::user()->designation=='Administrador')
+        {
+        $order = orders::find($id);
+        $det_order = orders_details::where('id_order',$id)->get();
+        $det_producto = det_products::orderBy('id','asc')->get();
+        $order_user = orders_users::where('id_orders',$id)->first();
+        $usuario = usuarios::where('id',$order_user->id_users_sender)->first();
+        return $this->response->title('Dashboard')
+        ->view('messages.messages_details_a')
+        ->data(['order' => $order, 'det_order' => $det_order, 'menu' => 'Solicitudes', 'det_producto' => $det_producto, 'order_user' => $order_user, 'usuario' => $usuario])
+        ->output();
+        }
+
+        if(Auth::user()->designation=='Super usuario')
+        {
+        $order = orders::find($id);
+        $det_order = orders_details::where('id_order',$id)->get();
+        $det_producto = det_products::orderBy('id','asc')->get();
+        return $this->response->title('Dashboard')
+        ->view('messages.messages_details_h')
+        ->data(['order' => $order, 'det_order' => $det_order, 'menu' => 'Solicitudes', 'det_producto' => $det_producto])
+        ->output();
+        }
+    }
+
+    public function detalle_modificar($id,$quantity)
+    {
+        //dd($quantity);
+        $det_order = orders_details::where('id',$id)->first();
+        //dd($det_order);
+        $det_order->cant = $quantity;
+        $det_order->save();
+
+        return redirect("/admin/solicitud/detalle/".$det_order->id_order);
     }
 
     public function responder(request $request)
@@ -152,7 +232,6 @@ class OrdersControllers extends Controller
             $iduser = Auth::user()->designation.' - '.Auth::user()->name;
     
             $order= orders::find($request->input('id'));
-            $order->cant = $request->input('cant');
             $order->status = $request->input('status');
             $order->observation = $request->input('obs');
             $order->save();
@@ -187,7 +266,7 @@ class OrdersControllers extends Controller
             $notify->save();
         }
 
-        if ($request->input('form_title') == 'user') {
+        /*if ($request->input('form_title') == 'user') {
             $iduser = Auth::user()->designation.' - '.Auth::user()->name;
     
             $order= orders::find($request->input('id'));
@@ -204,7 +283,7 @@ class OrdersControllers extends Controller
             $notify->name = $iduser;
             $notify->id_user_receiver = $user_send->id;
             $notify->save();
-        }
+        }*/
         
 
 
@@ -218,6 +297,13 @@ class OrdersControllers extends Controller
             ->join('det_products_productos', 'det_products.id', '=', 'det_products_productos.det_products_id')
             ->where('det_products_productos.productos_id',$_GET['id'])
             ->get();
+        echo json_encode(['productos' => $det_products]);
+    }
+
+    public function consulta_ajax_det()
+    {
+        //$det_products = det_products::find($_GET['id']);
+        $det_products= det_products::where('cod',$_GET['id'])->first();
         echo json_encode(['productos' => $det_products]);
     }
 
@@ -249,6 +335,13 @@ class OrdersControllers extends Controller
             ->where('orders_users.id_users_sender',$iduser)
             ->where('orders.status','0')
             ->paginate(15);
+
+            $success = \DB::table('orders')
+            ->select('orders.id','orders.title','orders.description','orders.status','orders.created_at', 'orders.observation', 'orders_users.id_users_receiver', 'orders_users.id_users_sender')
+            ->join('orders_users', 'orders.id', '=', 'orders_users.id_orders')
+            ->where('orders.status','1')
+            ->orwhere('orders_users.id_users_receiver',$iduser)
+            ->paginate(15);
          break;
          case 'aprobado':
             $receiver= \DB::table('orders')
@@ -263,6 +356,13 @@ class OrdersControllers extends Controller
             ->join('orders_users', 'orders.id', '=', 'orders_users.id_orders')
             ->where('orders_users.id_users_sender',$iduser)
             ->where('orders.status','1')
+            ->paginate(15);
+
+            $success = \DB::table('orders')
+            ->select('orders.id','orders.title','orders.description','orders.status','orders.created_at', 'orders.observation', 'orders_users.id_users_receiver', 'orders_users.id_users_sender')
+            ->join('orders_users', 'orders.id', '=', 'orders_users.id_orders')
+            ->where('orders.status','1')
+            ->orwhere('orders_users.id_users_receiver',$iduser)
             ->paginate(15);
          break;
          case 'rechazado':
@@ -279,6 +379,13 @@ class OrdersControllers extends Controller
             ->where('orders_users.id_users_sender',$iduser)
             ->where('orders.status','2')
             ->paginate(15);
+
+            $success = \DB::table('orders')
+            ->select('orders.id','orders.title','orders.description','orders.status','orders.created_at', 'orders.observation', 'orders_users.id_users_receiver', 'orders_users.id_users_sender')
+            ->join('orders_users', 'orders.id', '=', 'orders_users.id_orders')
+            ->where('orders.status','1')
+            ->orwhere('orders_users.id_users_receiver',$iduser)
+            ->paginate(15);
          break;
           }
 
@@ -293,10 +400,28 @@ class OrdersControllers extends Controller
         $productos = productos::orderBy('name','asc')->get();
         $categoria = categoria::orderBy('name','asc')->get();
          
+        if(Auth::user()->designation=='Sucursal')
+        {
         return $this->response->title('Dashboard')
-            ->view('messages.messages')
-            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos,])
+            ->view('messages.messages_sucursal')
+            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
             ->output();
+        }
+
+        if(Auth::user()->designation=='Administrador')
+        {
+        return $this->response->title('Dashboard')
+            ->view('messages.messages_admin')
+            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
+            ->output();
+        }
+        elseif(Auth::user()->designation=='Super usuario')
+        {
+        return $this->response->title('Dashboard')
+            ->view('messages.messages_susuario')
+            ->data(['receiver' => $receiver, 'send' => $send, 'menu' => 'Solicitudes', 'admin' => $admin,'categoria' => $categoria, 'productos' => $productos, 'receiver_root' => $success])
+            ->output();
+        }
     }
 
 }

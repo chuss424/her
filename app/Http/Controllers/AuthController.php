@@ -100,7 +100,8 @@ class AuthController extends Controller
         $categoria = categoria::orderBy('id','asc')->get();
         $tipo = type_pro::orderBy('name','asc')->get();
         $active = 'mensaje';
-        return view('sesion',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active]);
+        $name_page = 'Iniciar sesión cliente';
+        return view('sesion',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
     }
 
     public function sesion_view()

@@ -19,6 +19,7 @@ use App\type_pro;
 use App\notify;
 use App\orders;
 use App\orders_users;
+use App\orders_details;
 use App\usuarios;
 use App\carrito;
 use Illuminate\Support\Facades\Mail;
@@ -55,11 +56,12 @@ class PublicController extends Controller
     public function home()
     {
         $productos = productos::orderBy('name','asc')->get();
+        $det_productos = det_products::where('destacado','1')->orderBy('id','asc')->get();
         $categoria = categoria::orderBy('id','asc')->get();
         $tipo = type_pro::orderBy('name','asc')->get();
         $active = 'home';
 
-        return view('home',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active]);
+        return view('home',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'det_productos' => $det_productos]);
     }
 
     public function somos()
@@ -72,6 +74,66 @@ class PublicController extends Controller
         $name_page = 'Quiénes somos';
 
         return view('somos',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
+    }
+
+    public function faq()
+    {
+
+        $productos = productos::orderBy('name','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $tipo = type_pro::orderBy('name','asc')->get();
+        $active = 'faq';
+        $name_page = 'Preguntas frecuentes';
+
+        return view('mantenimiento',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
+    }
+
+    public function cuentas()
+    {
+
+        $productos = productos::orderBy('name','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $tipo = type_pro::orderBy('name','asc')->get();
+        $active = 'clientes';
+        $name_page = 'Cuentas Bancarias';
+
+        return view('cuenta_bancaria',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
+    }
+
+    public function despacho_clientes()
+    {
+
+        $productos = productos::orderBy('name','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $tipo = type_pro::orderBy('name','asc')->get();
+        $active = 'clientes';
+        $name_page = 'Despacho a clientes';
+
+        return view('despacho_cliente',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
+    }
+
+    public function creditos_clientes()
+    {
+
+        $productos = productos::orderBy('name','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $tipo = type_pro::orderBy('name','asc')->get();
+        $active = 'clientes';
+        $name_page = 'Créditos a clientes';
+
+        return view('credito_cliente',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
+    }
+
+    public function proveedor()
+    {
+
+        $productos = productos::orderBy('name','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $tipo = type_pro::orderBy('name','asc')->get();
+        $active = 'proveedor';
+        $name_page = 'Proveedor';
+
+        return view('mantenimiento',['productos'=>$productos, 'categoria'=>$categoria, 'tipo'=>$tipo, 'active' => $active, 'name_page' => $name_page]);
     }
 
     public function url(Request $request,$id_url,$id_urls=""){
@@ -124,52 +186,58 @@ class PublicController extends Controller
     }
 
 /* solicitud de producto desde pagina principal */
-    public function solicitar_producto()
+    public function solicitar_producto(request $request)
     {
         
-
+        //dd($request->all());
         $iduser = Auth::user()->id;
         $nameuser = Auth::user()->name;
-        $root = Auth::user()->user_id;
+        $cliente = usuarios::find(Auth::user()->id);
+        
 
         $order= New orders;
-        $order->title = 'Producto: '.$_GET['producto'];
-        $order->description = 'El cliente '.$nameuser. ' esta solicitando el producto: '.$_GET['producto'];
-        $order->status = '0';
-        $order->id_product = $_GET['id'];
-        $order->id_det_pro = $_GET['id_det'];
-        $order->cant = $_GET['cant'];
+        $order->title = 'Pedido de cliente '.$request->input('name');
+        $order->description = 'Pedido solicitado desde la pagina principal';
+        $order->status = '1';
+        $order->nombre_cliente = $request->input('name');
+        $order->dni_cliente = $request->input('dni');
+        $order->tel_cliente = $request->input('telefono');
+        $order->correo_cliente = $request->input('correo');
+        $order->dir_cliente = $request->input('direccion').'.';
         $order->save();
+
+        $producto = $request->input('producto');
+        $cantidad = $request->input('cantidad');
+
+        foreach ($producto as $key =>$value ) {
+            $separar = explode('-',$value);
+            $id_producto = $separar[0];
+            $id_det_producto = $separar[1];
+            if ($value!=null) {
+                $det_order = New orders_details;
+                $det_order->id_order = $order->id;
+                $det_order->id_product = $id_producto;
+                $det_order->id_det_pro = $id_det_producto;
+                $det_order->cant = $cantidad[$key];
+                $det_order->save();
+            }
+        }
 
         $order_user = New orders_users;
         $order_user->id_orders = $order->id;
         $order_user->id_users_sender = $iduser;
-        $order_user->id_users_receiver = $root;
+        $order_user->id_users_receiver = $cliente->user_id;
         $order_user->save();
 
         $notify= New notify;
-        $notify->titulo = 'Tienes una solicitud de '.$order->title;
+        $notify->titulo = 'Pedido de cliente '.$request->input('name');
         $notify->url = 'admin/solicitud';
         $notify->read_n = '0';
         $notify->name = $nameuser;
-        $notify->id_user_receiver = $root;
+        $notify->id_user_receiver = $cliente->user_id;
         $notify->save();
 
-        $carrito=carrito::find($_GET['carrito']);
-        $carrito->delete();
-
-        /*$tomail = 'jesus.espinoza@yainso.com';
-        $DatosCliente = usuarios::where('id',$iduser)->first();
-        $data = [
-                'FirstName' => 'Titulo de la soicitud',
-                'LastName' => 'descripcion de la solicitud',
-            ];
-        Mail::send('emails.SolicitarPro',$data, function($msj) use ($DatosCliente)
-        {
-            $msj->from('noreply@hermer.com');
-            $msj->subject('solicitud de producto por: '.$DatosCliente->name." ".$DatosCliente->dni);
-            $msj->to('jesus.espinoza@yainso.com');
-        });*/
+        \Session::forget('cart');
         
 
         return Redirect('/cliente/carrito');

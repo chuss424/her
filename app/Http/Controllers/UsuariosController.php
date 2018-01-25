@@ -44,8 +44,15 @@ class UsuariosController extends Controller
         if (Auth::user()->designation == 'Sucursal') {
             return redirect("/admin/usuarios/stop");
         }
-    	$iduser = Auth::user()->id;
-    	$usuarios= usuarios::where('user_id',$iduser)->paginate(10);
+        if (Auth::user()->designation == 'Super usuario') {
+            $iduser = Auth::user()->id;
+            $usuarios= usuarios::where('user_id',$iduser)->where('designation','Administrador')->paginate(10);
+        }
+        else
+        {
+    	   $iduser = Auth::user()->id;
+    	   $usuarios= usuarios::where('user_id',$iduser)->paginate(10);
+        }
     	//return view('usuarios.usuarios',['datos'=> $usuarios]);
         return $this->response->title('Dashboard')
             ->view('usuarios.usuarios')
@@ -63,6 +70,12 @@ class UsuariosController extends Controller
         $user->password = bcrypt($request->input('contraseña'));
         $user->api_token = str_random(60);
         $user->designation = $request->input('designacion');
+        $user->dni = $request->input('dni');
+        $user->mobile = $request->input('telefono');
+        $user->address = $request->input('direccion');
+        $user->state = $request->input('departamento');
+        $user->district = $request->input('provincia');
+        $user->city = $request->input('distrito');
         $user->Status= 'Active';
         $user->user_id= $iduser;
         $user->save();

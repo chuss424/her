@@ -72,16 +72,17 @@ class ProductsController extends Controller
 
     public function crear(request $request)
     {
-        //dd($request->all());
+        //dd($request->hasFile('foto'));
+
         $separar = explode(',',$request->input('categoria'));
         $categoria = $separar[0];
         $tipo = $separar[1];
 
-        $banner=$this->subir_imagen('foto',"/pluton/images/productos/","",$request);
+        //$banner=$this->subir_imagen('foto',"/pluton/images/productos/","",$request);
         $producto = New productos;
         $producto->name = $request->input('nombre');
         $producto->marca = $request->input('marca');
-        $producto->picture = $banner;
+        $producto->picture = '';
         $producto->type_pro = $tipo;
         $producto->save();
 
@@ -103,6 +104,37 @@ class ProductsController extends Controller
         }
 
         $producto->categoria()->attach($categoria);
+
+        $imagen_vieja = "";
+        $direccion = "/pluton/images/productos/";
+
+        if ($request->hasFile('foto')){      
+            $file=$request->file('foto');
+            foreach ($file as $key =>$value ) {
+                $extension=$value->getClientOriginalExtension();
+                $foto_name=$codigo[$key];
+                //$foto_name=str_replace([".png",".jpg",".jpeg"], '', $foto_name);
+
+                if ($extension!='png' && $extension!='jpg' && $extension!='jpeg' ) {
+    
+                    return back()->withInput()->with('status', 'nose permiten archivos .'.$extension);
+                      
+                }else{
+                    if($imagen_vieja!=""){
+                        Storage::delete($imagen_vieja);
+                    }            
+                    $nombre_image=$direccion.str_slug($foto_name).".".$extension;
+                    //dd($nombre_image);               
+                    Storage::disk('local')->put($nombre_image,  \File::get($value));
+                    $detalle_pro = det_products::where('cod',$codigo[$key])->first();
+                    $detalle_pro->picture = $nombre_image;
+                    $detalle_pro->save();             
+                }
+            }                             
+        }
+        else{ 
+           $nombre_image=$imagen_vieja;           
+        }
         
 
         return redirect("/admin/productos");
@@ -124,6 +156,57 @@ class ProductsController extends Controller
             ->output();
     }
 
+    public function vista_modificar_img($id)
+    {
+        if (Auth::user()->designation != 'Super usuario') {
+            return redirect("/admin/usuarios/stop");
+        }
+
+        $tipo = type_pro::orderBy('id','asc')->get();
+        $categoria = categoria::orderBy('id','asc')->get();
+        $producto = det_products::where('id',$id)->first();
+        $tip = $producto->products[0]->id;
+        return $this->response->title('Dashboard')
+            ->view('products.modificar_img')
+            ->data(['datos' => $producto,'menu' => 'Productos','categoria' => $categoria, 'tipo' => $tipo, 'tip' => $tip])
+            ->output();
+    }
+
+    public function modificar_img(request $request)
+    {
+
+        $producto=det_products::find($request->input('id'));
+        //dd($producto->products[0]->id);
+        $name_input_imagen = 'foto';
+        $imagen_vieja = $producto->picture;
+        $direccion = "/pluton/images/productos/";
+        if ($request->hasFile($name_input_imagen)){       
+                
+            $extension=$request->file($name_input_imagen)->getClientOriginalExtension();
+
+            if ($extension!='png' && $extension!='jpg' && $extension!='jpeg' ) {
+
+                return back()->withInput()->with('status', 'nose permiten archivos .'.$extension);
+                  
+            }else{
+                if($imagen_vieja!=""){
+                    Storage::delete($imagen_vieja);
+                }            
+                $nombre_image=$direccion.str_slug($producto->cod).".".$extension;                
+                Storage::disk('local')->put($nombre_image,  \File::get($request->file($name_input_imagen)));
+                $producto->picture = $nombre_image;
+                $producto->save();             
+            }                  
+        }
+        else{ 
+           $nombre_image=$imagen_vieja;           
+        }
+
+        return redirect("/admin/productos/modificar/".$producto->products[0]->id);
+
+
+    }
+
     public function modificar_guardar(request $request)
     {
         //dd($request->all());
@@ -134,7 +217,7 @@ class ProductsController extends Controller
         $producto=productos::find($request->input('id'));
         $producto->name = $request->input('nombre');
         $producto->marca = $request->input('marca');
-        $producto->picture = $this->subir_imagen('foto',"/pluton/images/productos/",$producto->picture,$request);
+        $producto->picture = '';
         $producto->type_pro = $tipo;
         $producto->save();
 
@@ -171,6 +254,37 @@ class ProductsController extends Controller
                     $detalle_pro_ant->save(); 
                 }
             }
+        }
+
+        $imagen_vieja = "";
+        $direccion = "/pluton/images/productos/";
+
+        if ($request->hasFile('foto')){      
+            $file=$request->file('foto');
+            foreach ($file as $key =>$value ) {
+                $extension=$value->getClientOriginalExtension();
+                $foto_name=$codigo[$key];
+                //$foto_name=str_replace([".png",".jpg",".jpeg"], '', $foto_name);
+
+                if ($extension!='png' && $extension!='jpg' && $extension!='jpeg' ) {
+    
+                    return back()->withInput()->with('status', 'nose permiten archivos .'.$extension);
+                      
+                }else{
+                    if($imagen_vieja!=""){
+                        Storage::delete($imagen_vieja);
+                    }            
+                    $nombre_image=$direccion.str_slug($foto_name).".".$extension;
+                    //dd($nombre_image);               
+                    Storage::disk('local')->put($nombre_image,  \File::get($value));
+                    $detalle_pro = det_products::where('cod',$codigo[$key])->first();
+                    $detalle_pro->picture = $nombre_image;
+                    $detalle_pro->save();             
+                }
+            }                             
+        }
+        else{ 
+           $nombre_image=$imagen_vieja;           
         }
 
         $producto->categoria()->sync($categoria);
@@ -255,6 +369,7 @@ class ProductsController extends Controller
       $productos=productos::find($id);
       foreach ($productos->det_products as $key => $value) {
           $det_p = det_products::find($value->id);
+          Storage::delete($det_p->picture);
           $det_p->delete();
       }
       $productos->det_products()->detach();
@@ -291,6 +406,7 @@ class ProductsController extends Controller
     public function borrar_det($id)
     {
         $detalle= det_products::find($id);
+        Storage::delete($detalle->picture);
         $detalle->products()->detach();
         $detalle->delete();
         return back()->withInput()->with('ok', 'Imagen Borrada');
@@ -326,7 +442,7 @@ class ProductsController extends Controller
         $tipo_productos = type_pro::orderBy('id','asc')->get();
         return $this->response->title('Dashboard')
             ->view('conf.producto')
-            ->data(['datos' => $productos, 'menu' => 'Configuracion','cat' => '', 'tipo' => $tipo_productos])
+            ->data(['datos' => $productos, 'menu' => 'Tipo','cat' => '', 'tipo' => $tipo_productos])
             ->output();
     }
 
